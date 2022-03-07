@@ -91,5 +91,10 @@ adj_mat <- function(df){
 
 det_auto_reg <- function(df){
   count <- 0
-  
+  for (i in 1:length(diag(df))) {
+    if(diag(df)[i] != 0){
+      count <- count + 1
+    }
+  }
+  return(count)
 }
