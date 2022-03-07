@@ -1,0 +1,43 @@
+---
+title: "Tarea 1"
+author: "Jorge Luis Gómez"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    fig_height: 8
+    fig_width: 13
+    number_section: yes
+    theme: cerulean
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+---
+**Todos los ejercicios son con base en esta imagen**
+
+![Imagen de la tarea](D:/Rs/Intro_biologia_sistemas/Tareas/HW_1.pdf)
+
+# Primeros ejercicios
+
+**Quizás no entendí bien la diferencia entre loops y cycles**
+
+1. **Is the network strongly connected? Explain your answer.**
+   * No, $\frac{n(n-1)}{2}$ es la cantidad de conexiones máximas que puede tener una red no dirigida. En el caso de una red dirigida, tal como la del ejercicio, $n(n-1)$ es la cantidad máxima posible. Comparamos el número de las conexiones que tenemos así como la densidad, la cual se explica de este modo $D= \frac{edges}{Total}$; obtenemos un porcentaje y lo evaluamos. En este caso tenemos 19 nodos, por lo que el número máximo de conexiones es de 342, pero solo existen 29, de modo que no tenemos siquiera un 10% de las conexiones posibles.
+2. **If the network is not strongly connected, identify its strongly connected components.**
+   * Ca2 y Depolar son nodos altamente conectados. Si lo consideramos como subgrafos, las conexiones de Ca2,PLC,InsP3 y CIS, así como Ca2, AnionEM, Closure, KOUT, KAP y Depolar igualmente parecen presentar una cantidad considerable de conexiones entre ellos.
+3. **Does the network contain loops? If so, identify them.**
+   * Si. Ca2->KEV->Depolar, Ca2->Depolar. 
+4. **Does the network contain cycles? If so, identify all cycles.**
+   * Si. Ca2->PLC->InsP3->CIS->Ca2. Ca2->NOS->NO->GC->cGMP->CIS->Ca2. Ca2->NOS->NO->ADPRc->cADPR->CIS->Ca2
+5. **Are there any feed-forward loops? If so, identify them as positive, negative, or incoherent.**
+6. **Are there any feedback loops? Identify them. Identify their sign as positive or negative.**
+
+# Otros ejercicios
+
+![](D:/Rs/Intro_biologia_sistemas/Tareas/img_2.jpeg)
+![](D:/Rs/Intro_biologia_sistemas/Tareas/img_3.jpeg)
+![](D:/Rs/Intro_biologia_sistemas/Tareas/img_1.jpeg)
