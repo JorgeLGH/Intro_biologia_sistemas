@@ -98,3 +98,19 @@ det_auto_reg <- function(df){
   }
   return(count)
 }
+
+##----- Detect reciprocal regulation -----
+
+det_rec_reg <- function(df){
+  count <- 0
+  for (i in 1:nrow(df)) {
+    for (k in 1:nrow(df)) {
+      if(i != k){
+        if(df[i,k]==1 & df[k,i]==1){
+          count <- count + 1
+        }
+      }
+    }
+  }
+  return(count)
+}
