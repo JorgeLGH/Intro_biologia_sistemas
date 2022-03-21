@@ -1,0 +1,69 @@
+---
+title: "Regutools tutorial"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::robobook:
+    highlight: kate
+---
+
+```{r message=FALSE, warning=FALSE}
+library("regutools")
+
+## Other packages used
+library("Biostrings")
+
+## Connect to the RegulonDB database
+regulondb_conn <- connect_database()
+
+## Build a regulondb object
+e_coli_regulondb <-
+    regulondb(
+        database_conn = regulondb_conn,
+        organism = "E.coli",
+        database_version = "1",
+        genome_version = "1"
+    )
+
+e_coli_regulondb
+```
+
+
+```{r}
+list_datasets(e_coli_regulondb)
+```
+
+
+```{r}
+head(list_attributes(e_coli_regulondb, "GENE"), 12)
+```
+
+
+```{r}
+get_dataset(
+    regulondb = e_coli_regulondb,
+    dataset = "GENE",
+    attributes = c("posleft", "posright", "strand", "name"),
+    filters = list("name" = c("araC", "crp", "lacI"))
+)
+```
+
+```{r}
+get_dataset(
+    e_coli_regulondb,
+    attributes = c("posright", "name"),
+    filters = list("posright" = c(1, 5000)),
+    interval = "posright",
+    dataset = "GENE"
+)
+```
+
+
+```{r}
+get_gene_regulators(e_coli_regulondb, c("araC", "fis", "crp"))
+```
+
+```{r}
+get_regulatory_network(e_coli_regulondb, cytograph = TRUE)
+```
+
+
