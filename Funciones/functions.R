@@ -77,7 +77,7 @@ directed_motifs <- function(nodes, edges, reps, obs){
 
 
 
-##------ Adjacency matrix from directed graph format -----
+##------ List to adj matrix -----
 
 adj_mat <- function(df){
   mat_1 <- matrix(0, nrow(df), nrow(df))
@@ -114,3 +114,7 @@ det_rec_reg <- function(df){
   }
   return(count)
 }
+
+
+
+

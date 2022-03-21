@@ -285,6 +285,95 @@ return(mean(number_auto))
 
 # FFL (Feed forward loops)
 
+## Feed forward loop coherent 1
+
+```{r}
+# Example with Boolean network
+
+library(BoolNet)
+
+net1 <- loadNetwork("feed_fwl_loop_net")
+getAttractors(net1)
+plotAttractors(getAttractors(net1))
+plotStateGraph(getAttractors(net1))
+plotNetworkWiring(net1)
+
+```
+
+```{r}
+library(deSolve)
+
+# Same set of rules, but with discrete approach and step functions 
+
+# función escalón para el threshold
+escalon <- function(x, threshold){
+  ifelse(any(x<=threshold),return(0),return(1))
+}
+
+steps <- function(t, state, parameters) {
+with(as.list(c(state, parameters)), { 
+       dX <- 0
+       escalon1 <- escalon(x,0.3)
+       dY <- beta2*escalon1-alpha2*y
+       escalon2 <- escalon(y,0.6)
+       dZ <- escalon1*escalon2*beta3 #-alpha3*z
+        list(c(dX, dY, dZ))
+      })
+}
+
+
+parameters <- c(beta1=3, beta2=3, beta3=4, alpha1=1, alpha2=1, alpha3=2) # the faster the degradation of "z", it suddenly drops, even when smaller than the beta if we keep degradation of "z"
+
+state <- c(x=0.01, y=0, z=0)
+
+times <- seq(0, 100, by = 0.01)
+
+out <- ode(y = state, times = times, func = steps, parms = parameters)
+
+tail(out)
+
+matplot(out[ , 1], out[ , 2:4], type = "l", xlab = "Tiempo", ylab = "Concentración",
+main = "Concentraciones", lwd = 2,lty=1)
+legend("topright", c("x","Y","Z"), col = 1:3,lty=1)
+
+plot(out) # stability??
+```
+
+```{r}
+library(deSolve)
+
+# Approximation with use of Hill's equations
+
+# First coherent loop, positive regulation
+
+hill <- function(t, state, parameters) {
+with(as.list(c(state, parameters)), { 
+       dX <- 0
+       dY <- (beta1*(x^n))/(k^n+x^n) - alpha2*y
+       dZ <- ((beta1*(x^n))/(k^n+x^n))*((beta2*(y^n))/(k^n+y^n)) - alpha3*z
+        list(c(dX, dY, dZ))
+      })
+}
+
+parameters <- c(beta1=0.8, beta2=0.8, k=3, n=6, alpha1=1, alpha2=1, alpha3=0.4) 
+
+state <- c(x=0.1, y=0, z=0)
+
+times <- seq(0, 20, by = 0.01)
+
+out <- ode(y = state, times = times, func = hill, parms = parameters)
+
+tail(out)
+
+matplot(out[ , 1], out[ , 2:4], type = "l", xlab = "Tiempo", ylab = "Concentración",
+main = "Concentraciones", lwd = 2,lty=1)
+legend("topright", c("x","Y","Z"), col = 1:3,lty=1)
+
+plot(out)
+
+```
+
+
 ## Coherent and incoherent
 
 Check RegulonDB, it is the best curated database for E. coli's genes. 
@@ -293,7 +382,7 @@ Check RegulonDB, it is the best curated database for E. coli's genes.
 library(regutools)
 ```
 
-We'll work with the bacteria E. coli and with the yeast S. cerevisiae. Fisrtly, the approah will be directly with the sites and then, we'll be using computational ways of accessing the information. 
+We'll work with the bacteria E. coli and with the yeast S. cerevisiae. Firstly, the approach will be directly with the sites and then, we'll be using computational ways of accessing the information. 
 
 ```{r}
 e_coli <- read.table("MotifsRegulatoryNetwork/MotifsRegulatoryNetwork/01_Raw_Data/1aorinter_st.txt", quote = "\t")
@@ -333,37 +422,9 @@ BoolNet, Antelope, ginsim, gnbox, gna, biocham
 
 
 
+get_regulatory_network(e_coli_regulondb, cytograph = FALSE)->net_ecoli_regulonDB
+lista_adyacencia_e_coli<-as.data.frame(net_ecoli_regulonDB)
+red<-graph_from_data_frame(lista_adyacencia_e_coli[,1:2])
 
 
-
-
-
-
-e_coli<-read.table("01_Raw_Data/1aorinter_st.txt")
-#e_coli<-read.csv("01_Raw_Data/1aorinter_st.txt",sep = "\t")
-yeast<-read.table("01_Raw_Data/yeastinter_st.txt")
-
-auto_reg<-function(red){
-contador<-0
-for(i in 1:nrow(red)){
-if(red$V1[i]==red$V2[i]){
-  contador<-contador + 1
-}
-}
-return (contador)
-}
-
-#Emilio's function
-
-ah_ah<-function(red){
-matriz <- matrix(0, nrow(red), nrow(red))
-for (i in 1:nrow(red)) {
-  matriz[red$V1[i], red$V2[i]] <- 1
-  
-}
-return(matriz)
-}
-
-red_ecoli_m<-ah_ah(e_coli)
-red_yeast_m<-ah_ah(yeast)
 
