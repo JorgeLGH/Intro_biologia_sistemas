@@ -306,25 +306,23 @@ library(deSolve)
 # Same set of rules, but with discrete approach and step functions 
 
 # función escalón para el threshold
-escalon <- function(x, threshold){
-  ifelse(any(x<=threshold),return(0),return(1))
+escalon <- function(x,umbral){
+  return(ifelse(x>umbral,1,0))
 }
 
 steps <- function(t, state, parameters) {
 with(as.list(c(state, parameters)), { 
-       dX <- 0
-       escalon1 <- escalon(x,0.3)
-       dY <- beta2*escalon1-alpha2*y
-       escalon2 <- escalon(y,0.6)
-       dZ <- escalon1*escalon2*beta3 #-alpha3*z
+       dX <- 0 #must be 0 'cause it is the derivative of a constant, meaning there is no change
+       dY <- beta1*escalon(x,thresh1)-alpha1*y #step function makes it so it is binary activation 
+       dZ <- beta2*escalon(x,thresh1)*escalon(y, beta1/(2*alpha1))-alpha2*z # the second step considers
         list(c(dX, dY, dZ))
       })
 }
 
 
-parameters <- c(beta1=3, beta2=3, beta3=4, alpha1=1, alpha2=1, alpha3=2) # the faster the degradation of "z", it suddenly drops, even when smaller than the beta if we keep degradation of "z"
+parameters <- c(thresh1 =0.5, beta1 =3, beta2 = 4, alpha1=1 ,alpha2=2) 
 
-state <- c(x=0.01, y=0, z=0)
+state <- c(x=1, y=0, z=0)
 
 times <- seq(0, 100, by = 0.01)
 
@@ -332,11 +330,8 @@ out <- ode(y = state, times = times, func = steps, parms = parameters)
 
 tail(out)
 
-matplot(out[ , 1], out[ , 2:4], type = "l", xlab = "Tiempo", ylab = "Concentración",
-main = "Concentraciones", lwd = 2,lty=1)
-legend("topright", c("x","Y","Z"), col = 1:3,lty=1)
+plot(out, col="blue") 
 
-plot(out) # stability??
 ```
 
 ```{r}
@@ -344,32 +339,32 @@ library(deSolve)
 
 # Approximation with use of Hill's equations
 
+hill_activator<-function(x,k,n){
+  return ((x^n)/(k^n +x^n))
+}
+
 # First coherent loop, positive regulation
 
-hill <- function(t, state, parameters) {
+hill_pos_fl <- function(t, state, parameters) {
 with(as.list(c(state, parameters)), { 
-       dX <- 0
-       dY <- (beta1*(x^n))/(k^n+x^n) - alpha2*y
-       dZ <- ((beta1*(x^n))/(k^n+x^n))*((beta2*(y^n))/(k^n+y^n)) - alpha3*z
+       dX <- 0 # must be 0 'cause it is the derivative of a constant, meaning there is no change
+       dY <- beta1*hill_activator(x,k,n)-alpha1*y
+       dZ <- beta2*hill_activator(x,k,n)*hill_activator(y,k,n)-alpha2*z
         list(c(dX, dY, dZ))
       })
 }
 
-parameters <- c(beta1=0.8, beta2=0.8, k=3, n=6, alpha1=1, alpha2=1, alpha3=0.4) 
+parameters <- c(beta1=0.8, beta2=0.8, k=3, n=6, alpha1=1, alpha2=1) 
 
 state <- c(x=0.1, y=0, z=0)
 
 times <- seq(0, 20, by = 0.01)
 
-out <- ode(y = state, times = times, func = hill, parms = parameters)
+out <- ode(y = state, times = times, func = hill_pos_fl, parms = parameters)
 
 tail(out)
 
-matplot(out[ , 1], out[ , 2:4], type = "l", xlab = "Tiempo", ylab = "Concentración",
-main = "Concentraciones", lwd = 2,lty=1)
-legend("topright", c("x","Y","Z"), col = 1:3,lty=1)
-
-plot(out)
+plot(out,col="blue")
 
 ```
 
@@ -394,28 +389,54 @@ unique(e_coli$V3)
 table(yeast$V3)
 unique(yeast$V3)
 
-# count autoregulation
-cont <- 0
-for (i in 1:nrow(e_coli)) {
-  if(e_coli$V1[i]==e_coli$V2[i]){
-    cont <- cont + 1
-  }
-}
-
-cont # seems the autoregulations were excluded
-
-
-
-mat_1 <- matrix(0, nrow(e_coli), nrow(e_coli))
-for (i in 1:nrow(e_coli)) {
-    matriz[e_coli$V1[i], e_coli$V2[i]] <- 1
-    
-}
-
-
-
 ```
 
+```{r}
+library("regutools")
+
+## Other packages used
+library("Biostrings")
+
+## Connect to the RegulonDB database
+regulondb_conn <- connect_database()
+
+## Build a regulondb object
+e_coli_regulondb <-
+    regulondb(
+        database_conn = regulondb_conn,
+        organism = "E.coli",
+        database_version = "1",
+        genome_version = "1"
+    )
+
+e_coli_regulondb
+
+list_datasets(e_coli_regulondb) # show the available data sets within the object, each has more information
+
+head(list_attributes(e_coli_regulondb, "GENE"), 12) # we can access to different data within the data sets contained in the original object
+
+# we can access directly to data from, for example, specific genes and their DNA sense
+get_dataset(
+    regulondb = e_coli_regulondb,
+    dataset = "GENE",
+    attributes = c("posleft", "posright", "strand", "name"),
+    filters = list("name" = c("araC", "crp", "lacI"))
+)
+
+get_dataset(
+    e_coli_regulondb,
+    attributes = c("posright", "name"),
+    filters = list("posright" = c(1, 5000)),
+    interval = "posright",
+    dataset = "GENE"
+)
+
+# get specific regulators from specific genes
+get_gene_regulators(e_coli_regulondb, c("araC", "fis", "crp"))
+
+# we can even get into Cytoscape in order to modify the network
+get_regulatory_network(e_coli_regulondb, cytograph = TRUE)
+```
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
 
