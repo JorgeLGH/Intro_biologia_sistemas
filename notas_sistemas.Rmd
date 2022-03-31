@@ -435,8 +435,39 @@ get_dataset(
 get_gene_regulators(e_coli_regulondb, c("araC", "fis", "crp"))
 
 # we can even get into Cytoscape in order to modify the network
-get_regulatory_network(e_coli_regulondb, cytograph = TRUE)
+# get_regulatory_network(e_coli_regulondb, cytograph = TRUE)
 ```
+
+```{r}
+library(deSolve)
+
+hill_activator<-function(x,k,n){
+  return ((x^n)/(k^n +x^n))
+}
+
+# First coherent loop, positive regulation
+
+hill_pos_fl <- function(t, state, parameters) {
+with(as.list(c(state, parameters)), { 
+       dX <- beta1*hill_activator(y,k,n)-alpha1*x
+       dY <- beta2*hill_activator(x,k,n)-alpha2*y
+        list(c(dX, dY))
+      })
+}
+
+parameters <- c(beta1=2, beta2=1, k=.5, n=2, alpha1=1, alpha2=1) 
+
+state <- c(x=1, y=0)
+
+times <- seq(0, 20, by = 0.01)
+
+out <- ode(y = state, times = times, func = hill_pos_fl, parms = parameters)
+
+tail(out)
+
+plot(out, col="blue")
+```
+
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
 
