@@ -468,6 +468,20 @@ tail(out)
 plot(out, col="blue")
 ```
 
+# Multi Omics
+
+New methods arise to integrate different omic techniques from a same problem. New techniques appear with new perspectives since it is a hot topic; more and more data continues to be generated and new methods to analyze it must also be generated. We must approach the problems via a systemic approach, as reality is not as simple as a reductionist point of view. When we're speaking of multiomics, we'll integrate at least two sources of omics information in order to gain more information. 
+
+Most of the newer information have a bias towards *important* diseases such as cancer, so the information does not truly represent the context of many of the current lines of work. The cancer initiative does provide information, since it is a complex disease and has the opportunity of working with different new tools. 
+
+We can have methods that have a preferred focus, meaning that it can have a better performance with certain objectives such as similarity, correlation, fusion, multivariate, networks, and Bayesian, to name a few. The objective of integrating can be determining subtypes of diseases, learn more about the disease or even generate biomarkers for prediction. 
+
+## SNFtools workshop
+
+```{r}
+
+```
+
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
 
