@@ -478,19 +478,112 @@ We can have methods that have a preferred focus, meaning that it can have a bett
 
 ## SNFtools workshop
 
+We load the data within the package `SNFtool`.
+```{r}
+library(SNFtool)
+
+data("Data1")
+data("Data2")
+
+Data1 #expression data
+Data2 #methylation data
+```
+
+We will calculate the difference matrix.
+
 ```{r}
 
+# We fist make them matrices since they are data frames
+
+dist_expression <- as.matrix(Data1)
+dist_methylation <- as.matrix(Data2)
+
+# Make distance matrices
+
+d1 <- dist2(dist_expression, dist_expression)
+d2 <- dist2(dist_methylation, dist_methylation)
+
+# generate affinity matrices
+
+af_m1 <- affinityMatrix(d1, K=20, sigma = 0.5)
+af_m2 <- affinityMatrix(d2, K=20, sigma = 0.5)
+
+# Display clusters with heatmaps
+
+displayClustersWithHeatmap(af_m1, spectralClustering(af_m1, K=3))
+displayClustersWithHeatmap(af_m2, spectralClustering(af_m2, K=3))
+
+# fuse the data
+
+Fused <- SNF(list(af_m1, af_m2), 20, 20)
+
+# visual representation of data
+
+displayClustersWithHeatmap(Fused, spectralClustering(Fused, K=3))
+
 ```
+
+### SNFtool exercise
+
+```{r}
+library(SNFtool)
+
+# data is already within the directory
+
+data_lung_expression <- read.table("SNFtool/Lung/LUNG_Gene_Expression.txt")
+data_lung_methylation <- read.table("SNFtool/Lung/LUNG_Methy_Expression.txt")
+data_lung_mirna <- read.table("SNFtool/Lung/LUNG_Mirna_Expression.txt")
+data_lung_survival <- read.table("SNFtool/Lung/LUNG_Survival.txt")
+
+# Make them into matrices
+
+data_lung_expression <- as.matrix(data_lung_expression)
+data_lung_methylation <- as.matrix(data_lung_methylation)
+data_lung_mirna <- as.matrix(data_lung_mirna)
+data_lung_survival <- as.matrix(data_lung_survival)
+
+# make smaller matrices for it to work, they must be the same dimensions, if not, it won't work
+
+data_lung_expression <- data_lung_expression[1:nrow(data_lung_mirna),
+                                             sample(ncol(data_lung_expression), ncol(data_lung_expression)/8)]
+
+data_lung_methylation <- data_lung_methylation[1:nrow(data_lung_mirna),
+                                               sample(ncol(data_lung_methylation), ncol(data_lung_methylation)/8)]
+
+data_lung_mirna <- data_lung_mirna[,sample(ncol(data_lung_mirna), ncol(data_lung_mirna)/8)]
+
+
+# make distance matrices
+
+d1 <- dist2(data_lung_expression, data_lung_expression)
+d2 <- dist2(data_lung_methylation, data_lung_methylation)
+d3 <- dist2(data_lung_mirna, data_lung_mirna)
+
+# affinity matrices 
+
+af_m1 <- affinityMatrix(d1, K=20, sigma = 0.5)
+af_m2 <- affinityMatrix(d2, K=20, sigma = 0.5)
+af_m3 <- affinityMatrix(d3, K=20, sigma = 0.5)
+
+# Display clusters with heatmaps
+
+displayClustersWithHeatmap(af_m1, spectralClustering(af_m1, K=3))
+displayClustersWithHeatmap(af_m2, spectralClustering(af_m2, K=3))
+displayClustersWithHeatmap(af_m3, spectralClustering(af_m3, K=3))
+
+# fuse the data
+
+Fused <- SNF(list(af_m1, af_m2, af_m3), 20, 20)
+
+# visual representation of data
+
+displayClustersWithHeatmap(Fused, spectralClustering(Fused, K=3))
+```
+
 
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
 
-
-
-
-get_regulatory_network(e_coli_regulondb, cytograph = FALSE)->net_ecoli_regulonDB
-lista_adyacencia_e_coli<-as.data.frame(net_ecoli_regulonDB)
-red<-graph_from_data_frame(lista_adyacencia_e_coli[,1:2])
 
 
 
