@@ -533,25 +533,11 @@ library(SNFtool)
 data_lung_expression <- read.table("SNFtool/Lung/LUNG_Gene_Expression.txt")
 data_lung_methylation <- read.table("SNFtool/Lung/LUNG_Methy_Expression.txt")
 data_lung_mirna <- read.table("SNFtool/Lung/LUNG_Mirna_Expression.txt")
-data_lung_survival <- read.table("SNFtool/Lung/LUNG_Survival.txt")
 
-# Make them into matrices
-
-data_lung_expression <- as.matrix(data_lung_expression)
-data_lung_methylation <- as.matrix(data_lung_methylation)
-data_lung_mirna <- as.matrix(data_lung_mirna)
-data_lung_survival <- as.matrix(data_lung_survival)
-
-# make smaller matrices for it to work, they must be the same dimensions, if not, it won't work
-
-data_lung_expression <- data_lung_expression[1:nrow(data_lung_mirna),
-                                             sample(ncol(data_lung_expression), ncol(data_lung_expression)/8)]
-
-data_lung_methylation <- data_lung_methylation[1:nrow(data_lung_mirna),
-                                               sample(ncol(data_lung_methylation), ncol(data_lung_methylation)/8)]
-
-data_lung_mirna <- data_lung_mirna[,sample(ncol(data_lung_mirna), ncol(data_lung_mirna)/8)]
-
+# transpose data
+data_lung_expression <- t(data_lung_expression)
+data_lung_methylation <- t(data_lung_methylation)
+data_lung_mirna <- t(data_lung_mirna)
 
 # make distance matrices
 
@@ -572,6 +558,7 @@ displayClustersWithHeatmap(af_m2, spectralClustering(af_m2, K=3))
 displayClustersWithHeatmap(af_m3, spectralClustering(af_m3, K=3))
 
 # fuse the data
+# the "Fused" object is the integrated matrix from all the data
 
 Fused <- SNF(list(af_m1, af_m2, af_m3), 20, 20)
 
@@ -580,6 +567,28 @@ Fused <- SNF(list(af_m1, af_m2, af_m3), 20, 20)
 displayClustersWithHeatmap(Fused, spectralClustering(Fused, K=3))
 ```
 
+Make network from the integrated data
+
+```{r}
+library(igraph)
+library(networkD3)
+library(RCy3)
+
+gr_1 <- graph_from_adjacency_matrix(Fused, mode = "undirected", diag = F, weighted = T)
+
+wc <- cluster_walktrap(gr_1, weights = E(gr_1)$weights)
+#This function tries to find densely connected subgraphs, also called communities in a graph via random walks. The idea is that short random walks tend to stay in the same community.
+
+members <- membership(wc)
+#igraph community detection functions return their results as an object from the communities class. This manual page describes the operations of this class.
+
+red_1 <- igraph_to_networkD3(gr_1, group = members)
+
+#all seem connected due to the nature of the matrix, even when the correlations are low, they're still connected
+forceNetwork(Links = red_1$links, Nodes = red_1$nodes,
+             Source = "source", Target = "target",
+             NodeID = "name", Group = "group")
+```
 
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
