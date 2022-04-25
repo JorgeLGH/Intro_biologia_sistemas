@@ -478,6 +478,8 @@ We can have methods that have a preferred focus, meaning that it can have a bett
 
 ## SNFtools workshop
 
+It is one of the most famous integration methods available to integrate different omic data sets. The purpose is getting more information to create, for example, networks integrating all measures from different techniques in order to understand in depth the nature of biological phenomena. 
+
 We load the data within the package `SNFtool`.
 ```{r}
 library(SNFtool)
@@ -541,9 +543,9 @@ data_lung_mirna <- t(data_lung_mirna)
 
 # make distance matrices
 
-d1 <- dist2(data_lung_expression, data_lung_expression)
-d2 <- dist2(data_lung_methylation, data_lung_methylation)
-d3 <- dist2(data_lung_mirna, data_lung_mirna)
+d1 <- dist2(data_lung_expression, data_lung_expression)^(1/2)
+d2 <- dist2(data_lung_methylation, data_lung_methylation)^(1/2)
+d3 <- dist2(data_lung_mirna, data_lung_mirna)^(1/2)
 
 # affinity matrices 
 
@@ -560,11 +562,15 @@ displayClustersWithHeatmap(af_m3, spectralClustering(af_m3, K=3))
 # fuse the data
 # the "Fused" object is the integrated matrix from all the data
 
-Fused <- SNF(list(af_m1, af_m2, af_m3), 20, 20)
+Fused <- SNF(list(af_m1, af_m2, af_m3), K=20, 20)
 
 # visual representation of data
 
 displayClustersWithHeatmap(Fused, spectralClustering(Fused, K=3))
+
+# alluvial plots can show intresting changes in clusters
+
+plotAlluvial(Fused,2:5, color.vect = c("green","blue"))
 ```
 
 Make network from the integrated data
@@ -589,6 +595,12 @@ forceNetwork(Links = red_1$links, Nodes = red_1$nodes,
              Source = "source", Target = "target",
              NodeID = "name", Group = "group")
 ```
+
+## SNFtools abundancies integration
+
+
+
+
 
 
 BoolNet, Antelope, ginsim, gnbox, gna, biocham
