@@ -1,0 +1,553 @@
+---
+title: "timeOmics"
+author: 
+- name:  "Antoine Bodein"
+  affiliation: "CHU de QuÃ©bec Research Center, UniversitÃ© Laval, Molecular Medicine department, QuÃ©bec, QC, Canada"
+  email: "antoine.bodein.1@ulaval.ca"
+- name: "Olivier Chapleur"
+  affiliation: "Hydrosystems and Biopresses Research Unit, Irstea, Antony, France"
+- name: "Kim-Anh LÃª Cao"
+  affiliation: "Melbourne Integrative Genomics, School of Mathematics and Statistics, University of Melbourne, Melbourne, VIC, Australia"
+- name: "Arnaud Droit"
+  affiliation: "CHU de QuÃ©bec Research Center, UniversitÃ© Laval, Molecular Medicine department, QuÃ©bec, QC, Canada"
+package: timeOmics  
+output: 
+  BiocStyle::html_document
+  
+vignette: >
+  %\VignetteIndexEntry{timeOmics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}  
+  
+bibliography: ["mybib.bib"]
+biblio-style: apalike
+link-citations: true
+---
+
+```{r, echo =  FALSE}
+knitr::opts_chunk$set(eval = TRUE, 
+                      echo = TRUE,
+                      fig.align = "center",
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+# Introduction
+
+***timeOmics*** is a generic data-driven framework to integrate multi-Omics longitudinal data (**A.**) measured on the same biological samples and select key temporal features with strong associations within the same sample group.
+
+The main steps of ***timeOmics*** are:
+
+* a pre-processing step (**B.**) Normalize and filter low-expressed features, except those not varying over time,
+* a modelling step (**C.**)  Capture inter-individual variability in biological/technical replicates and accommodate heterogeneous experimental designs,
+* a clustering step (**D.**) Group features with the same expression profile over time. Feature selection step can also be used to identify a signature per cluster,
+* a post-hoc validation step (**E.**) Ensure clustering quality.
+
+This framework is presented on both single-Omic and multi-Omics situations.
+
+![Framework Overview](./img/method_overview.png)
+
+For more details please check:  
+*Bodein A, Chapleur O, Droit A and LÃª Cao K-A (2019) A Generic Multivariate Framework for the Integration of Microbiome Longitudinal Studies With Other Data Types. Front. Genet. 10:963. <a href="http://dx.doi.org/10.3389/fgene.2019.00963"> doi:10.3389/fgene.2019.00963</a>*
+
+# Start
+
+## Installation
+
+### Lastest Bioconductor Release
+
+```r
+## install BiocManager if not installed
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+## install timeOmics
+BiocManager::install('timeOmics')
+``` 
+### Lastest `Github` version
+
+```r
+install.packages("devtools")
+# then load
+library(devtools)
+install_github("abodein/timeOmics")
+```
+
+## Load the package
+
+```{r, message=FALSE, warning=FALSE}
+library(timeOmics)
+```
+
+## Useful package to run this vignette
+
+```{r, message=F}
+library(tidyverse)
+```
+
+# Required data
+
+Each omics technology produces count or abundance tables with samples in rows and features in columns (genes, proteins, species, ...).
+In multi-Omics, each *block* has the same rows and a variable number of columns depending on the technology and number of identified features.
+
+We assume each *block* *(omics)* is a matrix/data.frame with samples in **rows** (similar in each *block*) and features in **columns** (variable number of column). Normalization steps applied to each block will be covered in the next section.
+
+For this example, we will use a part of simulated data based on the above-mentioned article and generated as follow:
+
+Twenty reference time profiles, were generated on 9 *equally spaced*\* time points and assigned to 4 clusters (5 profiles each). These ground truth profiles were then used to simulate new profiles.
+The profiles from the 5 individuals were then modelled with `lmms` [@straube2015linear]. 
+Please check [@bodein2019generic] for more details about the simulated data.
+
+To illustrate the filtering step implemented later, we add an extra noisy profile resulting in a matrix of (9x5) x (20+1).
+
+\* *It is not mandatory to have equally spaced time points in your data.*
+
+```{r}
+data("timeOmics.simdata")
+sim.data <- timeOmics.simdata$sim
+
+dim(sim.data) 
+head(sim.data[,1:6])
+```
+
+
+# Data preprocessing
+
+Every analysis starts with a pre-processing step that includes normalization and data cleaning.
+In longitudinal multi-omics analysis we have a 2-step pre-processing procedure.
+
+## Platform-specific
+
+Platform-specific pre-processing is the type of normalization normally used without time component.
+It may differ depending on the type of technology.
+
+The user can apply normalization steps *(log, scale, rle, ...)* and filtering steps *(low count removal, ...)*.
+
+It is also possible to handle microbiome data with Centered Log Ratio transformation as described [here](http://mixomics.org/mixmc/pre-processing/).
+
+That is why we let the user apply their favorite method of normalization.
+
+
+## Time-specific
+
+In a longitudinal context, one can be interested only in features that vary over time and filter out molecules with a low variation coefficient.
+
+To do so, we can first naively set a threshold on the variation coefficient and keep those features that exceed the threshold.
+
+```{r}
+remove.low.cv <- function(X, cutoff = 0.5){
+  # var.coef
+  cv <- unlist(lapply(as.data.frame(X), 
+                      function(x) abs(sd(x)/mean(x))))
+  return(X[,cv > cutoff])
+}
+
+data.filtered <- remove.low.cv(sim.data, 0.5)
+```
+
+
+# Time Modelling
+
+The next step is the modelling of each feature (molecule) as a function of time.
+
+We rely on a *Linear Mixed Model Splines* framework (package `lmms`) to model the features expression as a function of time by taking into account inter-individual variability.
+
+`lmms` fits 4 different types of models described and indexed as below and assigns the best fit for each of the feature.
+
+* 0 = linear model, 
+* 1 = linear mixed effect model spline (LMMS) with defined basis, 
+* 2 = LMMS taking subject-specific random intercepts, 
+* 3 = LMMS with subject-specific intercept and slope.
+
+The package also has an interesting feature for filtering profiles which are not differentially expressed over time, with statistical testing (see `lmms::lmmsDE`).
+
+Once run, `lmms` summarizes each feature into a unique time profile.
+
+## `lmms` example
+
+`lmms` requires a data.frame with features in columns and samples in rows.
+
+For more information about `lmms` modelling parameters, please check `?lmms::lmmSpline`
+
+*** Package `lmms` was removed from the CRAN repository (Archived on 2020-09-11).
+https://cran.r-project.org/web/packages/lmms/index.html ***
+
+`lmms` package is still available and can be installed as follow:
+
+```r
+devtools::install_github("cran/lmms")
+library(lmms)
+```
+
+
+```{r, message=FALSE}
+# numeric vector containing the sample time point information
+time <- timeOmics.simdata$time
+head(time)
+```
+
+```{r,eval=FALSE}
+# example of lmms
+lmms.output <- lmms::lmmSpline(data = data.filtered, time = time,
+                         sampleID = rownames(data.filtered), deri = FALSE,
+                         basis = "p-spline", numCores = 4, timePredict = 1:9,
+                         keepModels = TRUE)
+modelled.data <- t(slot(lmms.output, 'predSpline'))
+```
+
+```{r, warning=FALSE, message=FALSE}
+lmms.output <- timeOmics.simdata$lmms.output
+modelled.data <- timeOmics.simdata$modelled
+```
+
+The `lmms` object provides a list of models for each feature. 
+It also includes the new predicted splines *(modelled data)* in the `predSpline` slot.
+The produced table contains features in columns and now, **times in rows**.
+
+Let's plot the modeled profiles.
+
+```{r}
+# gather data
+data.gathered <- modelled.data %>% as.data.frame() %>% 
+  rownames_to_column("time") %>%
+  mutate(time = as.numeric(time)) %>%
+  pivot_longer(names_to="feature", values_to = 'value', -time)
+
+# plot profiles
+ggplot(data.gathered, aes(x = time, y = value, color = feature)) + geom_line() +
+  theme_bw() + ggtitle("`lmms` profiles") + ylab("Feature expression") +
+  xlab("Time")
+```
+
+## Profile filtering
+
+Straight line modelling can occur when the inter-individual variation is too high.
+To remove the noisy profiles, we have implemented a 2-phase test procedure.
+
+* *Breusch-Pagan test*, which tests the homoscedasticity of the residuals.
+* *Cutoff on MSE* (mean squared error), to remove feature for which the residuals are too dispersed arround the fitted line.
+This threshold is determined automatically. The MSE for a linear model must not exceed the MSE of more complex models.
+
+```{r}
+filter.res <- lmms.filter.lines(data = data.filtered, 
+                                lmms.obj = lmms.output, time = time)
+profile.filtered <- filter.res$filtered
+```
+
+# Single-Omic longitudinal clustering
+
+To achieve clustering with multivariate ordination methods, we rely on the `mixOmics` package [@rohart2017mixomics].
+
+## Principal Component Analysis
+
+From the modelled data, we use a PCA to cluster features with similar expression profiles over time.
+
+PCA is an unsupervised reduction dimension technique which uses uncorrelated 
+intrumental variable (i.e. principal components) to summarize as much information 
+(*variance*) as possible from the data.
+
+In PCA, each component is associated to a loading vector of length P (number of features/profiles).
+For a given set of component, we can extract a set of strongly correlated profiles by 
+considering features with the top absolute coefficients in the loading vectors.
+
+Those profiles are linearly combined to define each component, and thus, explain similar information on a given component. 
+Different clusters are therefore obtained on each component of the PCA. 
+Each cluster is then further separated into two sets of profiles which we denote as â€œpositiveâ€ or â€œnegativeâ€ based on the sign of the coefficients in the loading vectors 
+Sign indicates how the features can be assign into 2 clusters.
+
+At the end of this procedure, each component create 2 clusters and each feature is assigned to a cluster according to the maximum contribution on a component and the sign of that contribution.
+
+*(see also `?mixOmics::pca` for more details about PCA and available options)*
+
+
+### Longitudinal clustering
+
+To optimize the number of clusters, the number of PCA components needs to be optimized (`getNcomp`).
+The quality of clustering is assessed using the silhouette coefficient.
+The number of components that maximizes the silhouette coefficient will provide the best clustering.
+
+
+```{r}
+# run pca
+pca.res <- pca(X = profile.filtered, ncomp = 5, scale=FALSE, center=FALSE)
+
+# tuning ncomp
+pca.ncomp <- getNcomp(pca.res, max.ncomp = 5, X = profile.filtered, 
+                      scale = FALSE, center=FALSE)
+
+pca.ncomp$choice.ncomp
+plot(pca.ncomp)
+```
+
+In this plot, we can observe that the highest silhouette coefficient is achieved when `ncomp = 2` (4 clusters).
+
+```{r}
+# final model
+pca.res <- pca(X = profile.filtered, ncomp = 2, scale = FALSE, center=FALSE)
+```
+
+All information about the cluster is displayed below (`getCluster`). 
+Once run, the procedure will indicate the assignement of each molecule to either the `positive` or `negative` cluster of a given component based on the sign of loading vector (contribution).
+
+```{r}
+# extract cluster
+pca.cluster <- getCluster(pca.res)
+head(pca.cluster)
+```
+
+### A word about the multivariate models
+
+Multivariate models provide a set of graphical methods to extract useful information about samples or variables (R functions from mixOmics).
+
+The sample plot, or more accurately here, the timepoint plot projects the samples/timpoints into the reduced space represented by the principal components (or latent structures).
+It displays the similarity (points are closed to each other) or dissimilarities between samples/timepoints.
+
+```{r}
+plotIndiv(pca.res)
+```
+
+Associations between variables can be displayed on a circle correlation.
+The variables are projected on the plane defined two principal components.
+Their projections are inside a circle of radius 1 centered and of unit variance. 
+Strongly associated (or correlated) variables are projected in the same direction from the origin. The greater the distance from the origin the stronger the association.
+
+```{r}
+plotVar(pca.res)
+```
+
+Lastly, the strenght of the variables on a component can be displayed by an horizontal barplot.
+
+```{r}
+plotLoadings(pca.res)
+```
+
+
+
+### Plot PCA longitudinal clusters
+
+Clustered profiles can be displayed with `plotLong`. 
+
+The user can set the parameters `scale` and `center` to scale/center all time profiles.
+
+(*See also `mixOmics::plotVar(pca.res)` for variable representation*)
+
+```{r}
+plotLong(pca.res, scale = FALSE, center = FALSE, 
+         title = "PCA longitudinal clustering")
+```
+
+
+## *sparse* PCA
+
+The previous clustering used all features. 
+*sparse* PCA is an optional step to define a cluster signature per cluster. 
+It selects the features with the highest loading scores for each component in order to determine a signature.
+
+*(see also `?mixOmics::spca` for more details about sPCA and available options)*
+
+### `keepX` optimization
+
+To find the right number of features to keep per component (`keepX`) and thus per cluster, the silhouette coefficient is assessed for a list of selected features (`test.keepX`) on each component.
+
+We plot below the silhouette coefficient corresponding to each sub-cluster (positive or negative contibution) with respect to the number of features selected. A large decrease indicates that the clusters are not homogeneous and therefore the new added features should not be included in the final model.
+
+This method tends to select the smallest possible signature, so if the user wishes to set a minimum number of features per component, this parameter will have to be adjusted accordingly.
+
+
+```{r}
+tune.spca.res <- tuneCluster.spca(X = profile.filtered, ncomp = 2, 
+                                  test.keepX = c(2:10))
+# selected features in each component
+tune.spca.res$choice.keepX
+plot(tune.spca.res)
+```
+
+In the above graph, evolution of silhouette coefficient per component and per contribution is plotted as a function of `keepX`.
+
+```{r}
+# final model
+spca.res <- spca(X = profile.filtered, ncomp = 2, 
+                 keepX = tune.spca.res$choice.keepX, scale = FALSE)
+plotLong(spca.res)
+```
+
+
+# multi-Omics longitudinal clustering 
+
+In this type of scenario, the user has 2 or more blocks of omics data from the same experiment 
+(i. e. gene expression and metabolite concentration) and he is interested in discovering 
+which genes and metabolites have a common expression profile.
+This may reveal dynamic biological mechanisms.
+
+The clustering strategy with more than one block of data is the same as longitudinal clustering with PCA and is based on integrative methods using Projection on Latent Structures (PLS).
+
+With 2 blocks, it is then necessary to use PLS.
+With more than 2 blocks, the user has to use a multi-block PLS.
+
+
+## Projection on Latent Structures (PLS)
+
+In the following section, *PLS* is used to cluster time profiles coming from **2 blocks** of data.
+*PLS* accepts 2 data.frames with the same number of rows (corresponding samples).
+
+*(see also `?mixOmics::pls` for more details about PLS and available options)*
+
+### Ncomp and Clustering 
+
+Like *PCA*, number of components of PLS model and thus number of clusters needs to be optimized (`getNcomp`).
+
+```{r}
+X <- profile.filtered
+Y <- timeOmics.simdata$Y
+
+pls.res <- pls(X,Y, ncomp = 5, scale = FALSE)
+pls.ncomp <- getNcomp(pls.res, max.ncomp = 5, X=X, Y=Y, scale = FALSE)
+pls.ncomp$choice.ncomp
+plot(pls.ncomp)
+```
+
+In this plot, we can observe that the highest silhouette coefficient is achieved when `ncomp = 2` (4 clusters).
+
+```{r}
+# final model
+pls.res <- pls(X,Y, ncomp = 2, scale = FALSE)
+
+# info cluster
+head(getCluster(pls.res))
+# plot clusters
+plotLong(pls.res, title = "PLS longitudinal clustering", legend = TRUE)
+```
+
+### Signature with *sparse* PLS
+
+As with *PCA*, it is possible to use the *sparse* PLS to get a signature of the clusters.
+
+`tuneCluster.spls` choose the correct number of feature to keep on block X `test.keepX` as well as 
+the correct number of feature to keep on block Y `test.keepY` among a list provided by the user and are tested for each of the components.
+
+*(see also `?mixOmics::spls` for more details about `spls` and available options)*
+
+```{r}
+tune.spls <- tuneCluster.spls(X, Y, ncomp = 2, test.keepX = c(4:10), test.keepY <- c(2,4,6))
+
+# selected features in each component on block X
+tune.spls$choice.keepX
+# selected features in each component on block Y
+tune.spls$choice.keepY
+
+# final model
+spls.res <- spls(X,Y, ncomp = 2, scale = FALSE, 
+                 keepX = tune.spls$choice.keepX, keepY = tune.spls$choice.keepY)
+
+# spls cluster
+spls.cluster <- getCluster(spls.res)
+
+# longitudinal cluster plot
+plotLong(spls.res, title = "sPLS clustering")
+```
+
+## Multi-block (s)PLS longitudinal clustering
+
+With more than **2 blocks** of data, it is necessary to use *multi-block PLS* to identify cluster of similar profile from **3 and more blocks** of data.
+
+This methods accepts a list of data.frame as `X` (same corresponding rows) and a Y data.frame.
+
+*(see also `?mixOmics::block.pls` for more details about block PLS and available options)*
+
+### Ncomp and Clustering 
+
+```{r}
+X <- list("X" = profile.filtered, "Z" = timeOmics.simdata$Z)
+Y <- as.matrix(timeOmics.simdata$Y)
+
+block.pls.res <- block.pls(X=X, Y=Y, ncomp = 5, 
+                           scale = FALSE, mode = "canonical")
+block.ncomp <- getNcomp(block.pls.res,X=X, Y=Y, 
+                        scale = FALSE, mode = "canonical")
+block.ncomp$choice.ncomp
+plot(block.ncomp)
+```
+
+In this plot, we can observe that the highest silhouette coefficient is achieved when `ncomp = 1` (2 clusters).
+
+```{r}
+# final model
+block.pls.res <- block.pls(X=X, Y=Y, ncomp = 1, scale = FALSE, mode = "canonical")
+# block.pls cluster
+block.pls.cluster <- getCluster(block.pls.res)
+
+# longitudinal cluster plot
+plotLong(block.pls.res)
+```
+
+### Signature with multi-block *sparse* PLS
+
+As with *PCA* and *PLS*, it is possible to use the *sparse* multi-block PLS to get a signature of the clusters.
+
+`tuneCluster.block.spls` choose the correct number of feature to keep on each block of X `test.keepX` as well as 
+the correct number of feature to keep on block Y `test.keepY` among a list provided by the user.
+
+*(see also `?mixOmics::block.spls` for more details about block sPLS and available options)*
+
+
+```{r}
+test.list.keepX <- list("X" = 4:10, "Z" = c(2,4,6,8))
+test.keepY <- c(2,4,6)
+
+tune.block.res <- tuneCluster.block.spls(X= X, Y= Y, 
+                                         test.list.keepX=test.list.keepX, 
+                                         test.keepY= test.keepY, 
+                                         scale=FALSE, 
+                                         mode = "canonical", ncomp = 1)
+# ncomp = 1 given by the getNcomp() function
+
+# selected features in each component on block X
+tune.block.res$choice.keepX
+# selected features in each component on block Y
+tune.block.res$choice.keepY
+
+# final model
+block.pls.res <- block.spls(X=X, Y=Y, 
+                            ncomp = 1, 
+                            scale = FALSE, 
+                            mode = "canonical", 
+                            keepX = tune.block.res$choice.keepX, 
+                            keepY = tune.block.res$choice.keepY)
+
+head(getCluster(block.pls.res))
+plotLong(block.pls.res)
+```
+
+
+# Post-hoc evaluation
+
+Interpretation based on correlations between profiles must be made with caution as it is highly likely to be
+spurious. Proportional distances has been proposed as an alternative to measure association a posteriori on the identified signature.
+
+In the following graphs, we represent all the proportionality distance within clusters and the distance of features inside the clusters with entire background set.
+
+We also use a Wilcoxon U-test to compare the within cluster median compared to the entire background set.
+
+
+```{r, eval=TRUE}
+# example fro multiblock analysis
+res <- proportionality(block.pls.res)
+# distance between pairs of features
+head(res$propr.distance)[1:6]
+
+# u-test pvalue by clusters
+pval.propr <- res$pvalue
+knitr::kable(pval.propr)
+plot(res)
+```
+
+In addition to the Wilcoxon test, proportionality distance dispersion within and with entire background set is represented by cluster in the above graph.
+
+Here, for cluster `1`, the proportionality distance is calculated between pairs of feature from the same cluster `1` (inside). 
+Then the distance is calculated between each feature of cluster `1` and every feature of cluster `-1` (outside).
+
+The same is applied on features from cluster `-1`.
+
+So we see that the intra-cluster distance is lower than the distances with the entire background set. 
+Which is confirmed by the Wilcoxon test and this ensures a good clustering.
+
+# References
