@@ -1,0 +1,5 @@
+choice	functions	output
+table	cor {stats}	correlation table
+scatter	pairs {graphics}	scatterplot of each pair
+hist	ggplot,geom_histogram,facet_wrap{ggplot2}	histogram of each column
+all	chart.Correlation {PerformanceAnalytics}	all of the above together
